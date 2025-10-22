@@ -1,267 +1,544 @@
-<#
-.SYNOPSIS
-    Downloads and installs the latest CMV Local Printing Agent
+# CMV Local Printing Agent - Installation Guide
 
-.DESCRIPTION
-    This script downloads the latest release from GitHub, extracts it, and runs the installer.
-    Designed for IT team deployment on Windows machines.
+Complete installation instructions for the CMV Local Printing Agent Windows service.
 
-.PARAMETER Version
-    Specific version to download (e.g., "v1.2.3", "v1.0.0-alpha"). Default is "latest".
+## Table of Contents
 
-.PARAMETER InstallPath
-    Directory where the agent will be extracted. Default is ".\cmv-agent"
+- [Quick Start](#quick-start)
+- [Automated Installation (Recommended)](#automated-installation-recommended)
+- [Manual Installation](#manual-installation)
+- [Service Management](#service-management)
+- [Troubleshooting](#troubleshooting)
+- [Uninstallation](#uninstallation)
 
-.PARAMETER SkipInstaller
-    If specified, downloads and extracts but does not run the installer script.
+---
 
-.EXAMPLE
-    .\download-and-install.ps1
-    Downloads and installs the latest stable version
+## Quick Start
 
-.EXAMPLE
-    .\download-and-install.ps1 -Version "v1.2.3"
-    Downloads and installs specific version v1.2.3
+**For IT Teams - Fastest Method:**
 
-.EXAMPLE
-    .\download-and-install.ps1 -Version "v1.0.0-alpha" -InstallPath "C:\CMV-Agent"
-    Downloads alpha version to custom location
+```powershell
+# 1. Download the 
+Invoke-WebRequest -Uri "https://raw.githubusercontent.com/franchise-factory/cmv-local-printing-agent-releases/master/download-and-install.ps1" -OutFile "download-and-install.ps1"
 
-.EXAMPLE
-    .\download-and-install.ps1 -SkipInstaller
-    Downloads and extracts but does not run installer (for testing)
+# 2. Unblock the script
+Unblock-File -Path .\download-and-install.ps1
 
-.NOTES
-    Requires: Internet connectivity, PowerShell 5.1+
-    GitHub API rate limit: 60 requests/hour (unauthenticated)
-#>
+# 3. Run as Administrator
+.\download-and-install.ps1
+```
 
-param(
-    [string]$Version = "latest",
-    [string]$InstallPath = ".\cmv-agent",
-    [switch]$SkipInstaller
-)
+That's it! The script will download, extract, and install the latest version automatically.
 
-# Configuration
-$RepoOwner = "franchise-factory"
-$RepoName = "cmv-local-printing-agent-releases"
-$TempZip = "$env:TEMP\cmv-agent-$([guid]::NewGuid()).zip"
+---
 
-# Color output helpers
-function Write-Header($message) {
-    Write-Host "`n$message" -ForegroundColor Cyan
-    Write-Host ("=" * $message.Length) -ForegroundColor Cyan
-}
+## Automated Installation (Recommended)
 
-function Write-Success($message) {
-    Write-Host "  [OK] $message" -ForegroundColor Green
-}
+### Prerequisites
 
-function Write-Info($message) {
-    Write-Host "  >> $message" -ForegroundColor Yellow
-}
+- Windows 10/11 or Windows Server 2016+
+- PowerShell 5.1 or later
+- Internet connectivity
+- Administrator privileges
 
-function Write-Detail($message) {
-    Write-Host "     $message" -ForegroundColor Gray
-}
+### Step-by-Step Instructions
 
-function Write-Failure($message) {
-    Write-Host "  [X] $message" -ForegroundColor Red
-}
+#### 1. Download the Installation Script
 
-# Main execution
-Write-Header "CMV Local Printing Agent Installer"
+**Option A: Direct download from GitHub**
+```powershell
+Invoke-WebRequest -Uri "https://raw.githubusercontent.com/franchise-factory/cmv-local-printing-agent-releases/master/download-and-install.ps1" -OutFile "download-and-install.ps1"
+```
 
-try {
-    # Step 1: Get release information
-    Write-Info "Fetching release information..."
+**Option B: Download from releases**
+- Go to: https://github.com/franchise-factory/cmv-local-printing-agent-releases/releases
+- Download the latest release zip
+- Extract and use the included `download-and-install.ps1`
 
-    if ($Version -eq "latest") {
-        $apiUrl = "https://api.github.com/repos/$RepoOwner/$RepoName/releases/latest"
-        Write-Detail "Requesting latest release from GitHub API"
-    } else {
-        $apiUrl = "https://api.github.com/repos/$RepoOwner/$RepoName/releases/tags/$Version"
-        Write-Detail "Requesting version $Version from GitHub API"
-    }
+#### 2. Unblock the Script
 
-    try {
-        $release = Invoke-RestMethod -Uri $apiUrl -ErrorAction Stop
-    }
-    catch {
-        if ($_.Exception.Response.StatusCode -eq 404) {
-            throw "Version '$Version' not found. Please check available versions at: https://github.com/$RepoOwner/$RepoName/releases"
-        }
-        elseif ($_.Exception.Response.StatusCode -eq 403) {
-            throw "GitHub API rate limit exceeded. Please try again in an hour or contact IT support."
-        }
-        else {
-            throw "Failed to fetch release information: $($_.Exception.Message)"
-        }
-    }
+**IMPORTANT:** Windows blocks downloaded scripts by default. You must unblock it first:
 
-    $versionTag = $release.tag_name
-    Write-Success "Found version: $versionTag"
+```powershell
+Unblock-File -Path .\download-and-install.ps1
+```
 
-    if ($release.prerelease) {
-        Write-Detail "Note: This is a pre-release version (alpha/beta)"
-    }
+**Why?** PowerShell's execution policy blocks unsigned scripts downloaded from the internet for security. This script is not digitally signed.
 
-    # Step 2: Find Windows zip asset
-    Write-Info "Locating Windows package..."
+#### 3. Open PowerShell as Administrator
 
-    $asset = $release.assets | Where-Object { $_.name -like "*windows.zip" } | Select-Object -First 1
+- Right-click **PowerShell** or **Windows Terminal**
+- Select **"Run as Administrator"**
+- Navigate to the directory containing the script
 
-    if (-not $asset) {
-        throw "No Windows package found in release $versionTag. Available assets: $($release.assets.name -join ', ')"
-    }
+#### 4. Run the Installation Script
 
-    $downloadUrl = $asset.browser_download_url
-    $assetSize = [math]::Round($asset.size / 1MB, 2)
+**Install latest version:**
+```powershell
+.\download-and-install.ps1
+```
 
-    Write-Success "Package: $($asset.name) ($assetSize MB)"
-    Write-Detail "Download count: $($asset.download_count)"
+**Install specific version:**
+```powershell
+.\download-and-install.ps1 -Version "v1.2.3"
+```
 
-    # Step 3: Download
-    Write-Info "Downloading package..."
-    Write-Detail "From: $downloadUrl"
-    Write-Detail "To: $TempZip"
+**Install to custom location:**
+```powershell
+.\download-and-install.ps1 -InstallPath "C:\CMV-Agent"
+```
 
-    try {
-        # Download with progress
-        $ProgressPreference = 'SilentlyContinue'  # Faster download
-        Invoke-WebRequest -Uri $downloadUrl -OutFile $TempZip -ErrorAction Stop
-        $ProgressPreference = 'Continue'
-    }
-    catch {
-        throw "Download failed: $($_.Exception.Message)"
-    }
+**Test download without installing:**
+```powershell
+.\download-and-install.ps1 -SkipInstaller
+```
 
-    $downloadedSize = [math]::Round((Get-Item $TempZip).Length / 1MB, 2)
-    Write-Success "Download complete ($downloadedSize MB)"
+#### 5. What the Script Does
 
-    # Step 4: Verify download
-    if ($downloadedSize -ne $assetSize) {
-        Write-Warning "Downloaded size ($downloadedSize MB) differs from expected ($assetSize MB)"
-    }
+The automated installer will:
+1. Query GitHub for the latest (or specified) release
+2. Download the release package
+3. Validate all required files are present
+4. Extract to the installation directory
+5. Run the Windows service installer
+6. Install and start the CMV Local Printing Agent service
 
-    # Step 5: Extract
-    Write-Info "Extracting files..."
+#### Installation Output
 
-    if (Test-Path $InstallPath) {
-        Write-Detail "Install path exists, removing old files..."
-        try {
-            Remove-Item -Path $InstallPath -Recurse -Force -ErrorAction Stop
-        }
-        catch {
-            throw "Failed to remove existing installation at $InstallPath. Please close any running agent processes and try again."
-        }
-    }
+```
+CMV Local Printing Agent Installer
+===================================
 
-    try {
-        New-Item -ItemType Directory -Path $InstallPath -Force | Out-Null
-        Expand-Archive -Path $TempZip -DestinationPath $InstallPath -Force -ErrorAction Stop
-    }
-    catch {
-        throw "Extraction failed: $($_.Exception.Message)"
-    }
+  >> Fetching release information...
+  [OK] Found version: v1.2.3
 
-    Write-Success "Extraction complete"
-    Write-Detail "Location: $InstallPath"
+  >> Downloading package...
+  [OK] Download complete (2.45 MB)
 
-    # Step 6: Verify files
-    Write-Info "Verifying installation files..."
+  >> Extracting files...
+  [OK] Extraction complete
 
-    $exePath = Join-Path $InstallPath "cmv-local-printing-agent.exe"
-    $dllPath = Join-Path $InstallPath "libusb-1.0.dll"
-    $installerPath = Join-Path $InstallPath "windows-service-install.ps1"
+  >> Verifying installation files...
+  [OK] All files verified
 
-    $missingFiles = @()
+  >> Running installer...
 
-    if (-not (Test-Path $exePath)) { $missingFiles += "cmv-local-printing-agent.exe" }
-    if (-not (Test-Path $dllPath)) { $missingFiles += "libusb-1.0.dll" }
-    if (-not (Test-Path $installerPath)) { $missingFiles += "windows-service-install.ps1" }
+===============================================
+  Deployment Summary
+===============================================
+  Version:    v1.2.3
+  Location:   .\cmv-agent
+  Downloaded: 2.45 MB
+===============================================
+```
 
-    if ($missingFiles.Count -gt 0) {
-        throw "Missing required files: $($missingFiles -join ', ')"
-    }
+---
 
-    $exeSize = [math]::Round((Get-Item $exePath).Length / 1MB, 2)
-    Write-Success "All files verified"
-    Write-Detail "cmv-local-printing-agent.exe ($exeSize MB)"
-    Write-Detail "libusb-1.0.dll"
-    Write-Detail "windows-service-install.ps1"
+## Manual Installation
 
-    # Step 7: Run installer
-    if ($SkipInstaller) {
-        Write-Header "Download Complete (Installer Skipped)"
-        Write-Success "Files extracted to: $InstallPath"
-        Write-Info "To install manually, run as Administrator:"
-        Write-Detail "cd $InstallPath"
-        Write-Detail ".\windows-service-install.ps1"
-    }
-    else {
-        Write-Info "Running installer..."
-        Write-Detail "This may require Administrator privileges"
-        Write-Detail "You may be prompted for elevation"
-        Write-Host ""
+If you prefer manual installation or automated download is not available:
 
-        try {
-            # Change to install directory and run installer
-            Push-Location $InstallPath
+### 1. Download Release Package
 
-            # Run installer script
-            & .\windows-service-install.ps1
+Go to the releases page:
+https://github.com/franchise-factory/cmv-local-printing-agent-releases/releases
 
-            $installerExitCode = $LASTEXITCODE
-            Pop-Location
+Download the latest `cmv-local-printing-agent-{version}-windows.zip`
 
-            if ($installerExitCode -eq 0) {
-                Write-Header "Installation Complete!"
-                Write-Success "Version: $versionTag"
-                Write-Success "Location: $InstallPath"
-                Write-Info "The CMV Local Printing Agent service should now be running"
-                Write-Detail "Check service status: Get-Service CMVLocalPrintingAgent"
-            }
-            else {
-                Write-Failure "Installer reported errors (exit code: $installerExitCode)"
-                Write-Info "Please check the installer output above for details"
-                exit $installerExitCode
-            }
-        }
-        catch {
-            Pop-Location
-            throw "Installer execution failed: $($_.Exception.Message)"
-        }
-    }
+### 2. Extract Files
 
-    # Success summary
-    Write-Host ""
-    Write-Host "===============================================" -ForegroundColor Cyan
-    Write-Host "  Deployment Summary" -ForegroundColor Cyan
-    Write-Host "===============================================" -ForegroundColor Cyan
-    Write-Host "  Version:    $versionTag" -ForegroundColor White
-    Write-Host "  Location:   $InstallPath" -ForegroundColor White
-    Write-Host "  Downloaded: $downloadedSize MB" -ForegroundColor White
-    Write-Host "===============================================" -ForegroundColor Cyan
-    Write-Host ""
+```powershell
+Expand-Archive -Path .\cmv-local-printing-agent-v1.2.3-windows.zip -DestinationPath C:\CMV-Agent
+```
 
-} catch {
-    Write-Host ""
-    Write-Failure "Installation failed!"
-    Write-Host "  Error: $($_.Exception.Message)" -ForegroundColor Red
-    Write-Host ""
-    Write-Host "Troubleshooting:" -ForegroundColor Yellow
-    Write-Host "  - Check internet connectivity" -ForegroundColor Gray
-    Write-Host "  - Verify version exists: https://github.com/$RepoOwner/$RepoName/releases" -ForegroundColor Gray
-    Write-Host "  - Check GitHub API rate limits (60/hour)" -ForegroundColor Gray
-    Write-Host "  - Ensure sufficient disk space" -ForegroundColor Gray
-    Write-Host "  - Try running PowerShell as Administrator" -ForegroundColor Gray
-    Write-Host ""
+### 3. Unblock the Installer Script
 
-    exit 1
-} finally {
-    # Cleanup
-    if (Test-Path $TempZip) {
-        Remove-Item $TempZip -Force -ErrorAction SilentlyContinue
-    }
-}
+```powershell
+cd C:\CMV-Agent
+Unblock-File -Path .\windows-service-install.ps1
+```
+
+### 4. Run Installer as Administrator
+
+```powershell
+.\windows-service-install.ps1
+```
+
+### 5. Select Installation Option
+
+You'll see an interactive menu:
+
+```
+===============================================
+  CMV Local Printing Agent - Service Manager
+===============================================
+
+Select an option:
+
+  1. Install Windows Service
+  2. Uninstall Windows Service
+  3. View Logs
+  4. View Configuration
+  5. Exit
+
+Enter your choice (1-5):
+```
+
+Select **option 1** to install the service.
+
+### Installation Process
+
+The installer will:
+1. Check for administrator privileges
+2. Verify all required files (.exe, .dll)
+3. Install the Windows service
+4. Configure the service for automatic startup
+5. Start the service
+6. Show installation summary
+
+---
+
+## Service Management
+
+### Interactive Menu
+
+Run the installer script to access service management:
+
+```powershell
+.\windows-service-install.ps1
+```
+
+**Available Options:**
+
+1. **Install Windows Service** - First-time installation or reinstall
+2. **Uninstall Windows Service** - Complete removal (with confirmation)
+3. **View Logs** - Browse and follow service logs
+4. **View Configuration** - Display service configuration and status
+5. **Exit** - Close the menu
+
+### Using Windows Services
+
+**Check service status:**
+```powershell
+Get-Service CMVLocalPrintingAgent
+```
+
+**Start the service:**
+```powershell
+Start-Service CMVLocalPrintingAgent
+```
+
+**Stop the service:**
+```powershell
+Stop-Service CMVLocalPrintingAgent
+```
+
+**Restart the service:**
+```powershell
+Restart-Service CMVLocalPrintingAgent
+```
+
+### Log Files
+
+Logs are stored in:
+- **Service Log:** `C:\Windows\System32\config\systemprofile\AppData\Local\CMVLocalPrintingAgent\data\logs\service.log`
+- **Emergency Log:** `C:\Windows\System32\config\systemprofile\AppData\Local\CMVLocalPrintingAgent\emergency.log`
+- **Bootstrap Log:** `C:\Windows\System32\config\systemprofile\AppData\Local\CMVLocalPrintingAgent\bootstrap.log`
+
+**View logs interactively:**
+```powershell
+.\windows-service-install.ps1
+# Select option 3: View Logs
+```
+
+**View logs manually:**
+```powershell
+# Last 50 lines
+Get-Content "C:\Windows\System32\config\systemprofile\AppData\Local\CMVLocalPrintingAgent\data\logs\service.log" -Tail 50
+
+# Follow in real-time
+Get-Content "C:\Windows\System32\config\systemprofile\AppData\Local\CMVLocalPrintingAgent\data\logs\service.log" -Wait
+```
+
+---
+
+## Troubleshooting
+
+### Script Execution Errors
+
+#### "File cannot be loaded because running scripts is disabled"
+
+**Cause:** PowerShell execution policy is too restrictive.
+
+**Solution:**
+```powershell
+# Check current policy
+Get-ExecutionPolicy
+
+# Set to RemoteSigned (recommended)
+Set-ExecutionPolicy RemoteSigned -Scope CurrentUser
+```
+
+#### "File is blocked"
+
+**Cause:** Script was downloaded from the internet and needs to be unblocked.
+
+**Solution:**
+```powershell
+Unblock-File -Path .\download-and-install.ps1
+Unblock-File -Path .\windows-service-install.ps1
+```
+
+### Download Issues
+
+#### "GitHub API rate limit exceeded"
+
+**Cause:** Too many requests to GitHub API (60 per hour for unauthenticated requests).
+
+**Solution:**
+- Wait one hour before retrying
+- Use manual installation instead
+- Download directly from browser: https://github.com/franchise-factory/cmv-local-printing-agent-releases/releases
+
+#### "Version not found"
+
+**Cause:** Specified version doesn't exist.
+
+**Solution:**
+- Check available versions: https://github.com/franchise-factory/cmv-local-printing-agent-releases/releases
+- Use `latest` instead: `.\download-and-install.ps1 -Version "latest"`
+- Verify version format (e.g., `v1.2.3` not `1.2.3`)
+
+#### Network connectivity issues
+
+**Solution:**
+- Check internet connection
+- Verify GitHub is accessible: https://www.githubstatus.com/
+- Check firewall/proxy settings
+- Try manual download from browser
+
+### Installation Issues
+
+#### "Service failed to start"
+
+**Cause:** Missing dependencies or configuration issues.
+
+**Solution:**
+1. Check service status:
+   ```powershell
+   Get-Service CMVLocalPrintingAgent | Format-List *
+   ```
+
+2. Check logs:
+   ```powershell
+   .\windows-service-install.ps1
+   # Select option 3: View Logs
+   ```
+
+3. Verify `libusb-1.0.dll` is present in installation directory
+
+4. Check Windows Event Viewer:
+   - Open Event Viewer
+   - Navigate to: Windows Logs → Application
+   - Look for CMVLocalPrintingAgent errors
+
+#### "Access Denied" errors
+
+**Cause:** Not running as Administrator.
+
+**Solution:**
+- Close PowerShell
+- Right-click PowerShell or Windows Terminal
+- Select **"Run as Administrator"**
+- Run the script again
+
+#### "Cannot find path" errors
+
+**Cause:** Working directory or file paths incorrect.
+
+**Solution:**
+- Verify you're in the correct directory:
+  ```powershell
+  Get-Location
+  ```
+- Change to the directory containing the script:
+  ```powershell
+  cd C:\path\to\cmv-agent
+  ```
+
+### Service Runtime Issues
+
+#### Service stops unexpectedly
+
+**Solution:**
+1. Check service logs for errors
+2. Verify configuration in `config.toml`
+3. Check Windows Event Viewer
+4. Restart the service:
+   ```powershell
+   Restart-Service CMVLocalPrintingAgent
+   ```
+
+#### USB printer not detected
+
+**Solution:**
+1. Verify WinUSB driver is installed for the printer
+2. Check service logs for USB errors
+3. Ensure printer is connected before starting service
+4. Check Device Manager for driver issues
+
+---
+
+## Uninstallation
+
+### Automated Uninstall
+
+```powershell
+# Run the installer script
+.\windows-service-install.ps1
+
+# Select option 2: Uninstall Windows Service
+# Confirm when prompted
+```
+
+### Manual Uninstall
+
+```powershell
+# Stop the service
+Stop-Service CMVLocalPrintingAgent
+
+# Remove the service
+sc.exe delete CMVLocalPrintingAgent
+
+# Remove installation directory
+Remove-Item -Path "C:\Windows\System32\config\systemprofile\AppData\Local\CMVLocalPrintingAgent" -Recurse -Force
+```
+
+### What Gets Removed
+
+**Automatically removed:**
+- Windows service registration
+- Service executable and libraries
+- Configuration files (`config.toml`)
+- Log files (service.log, emergency.log, bootstrap.log)
+- Database files (telemetry.db, queue.db)
+- Installation directory
+
+**NOT removed (intentionally):**
+- WinUSB drivers - To avoid breaking other USB devices that may use them
+
+---
+
+## Advanced Configuration
+
+### Custom Installation Parameters
+
+The installer supports custom configuration:
+
+```powershell
+# Custom API URL
+.\windows-service-install.ps1 -APIURL "https://custom-api.example.com"
+
+# Custom log level
+.\windows-service-install.ps1 -LogLevel "debug"
+
+# Custom executable path (if needed)
+.\windows-service-install.ps1 -ExePath "C:\Custom\Path\cmv-local-printing-agent.exe"
+```
+
+### Configuration File
+
+After installation, configuration is stored in:
+`C:\Windows\System32\config\systemprofile\AppData\Local\CMVLocalPrintingAgent\config.toml`
+
+View configuration:
+```powershell
+.\windows-service-install.ps1
+# Select option 4: View Configuration
+```
+
+---
+
+## Support
+
+### Getting Help
+
+- **Installation issues:** Review this README and troubleshooting section
+- **Service errors:** Check log files for detailed error messages
+- **Feature requests:** Contact your IT department or development team
+
+### Version Information
+
+To check installed version:
+```powershell
+.\windows-service-install.ps1
+# Select option 4: View Configuration
+# Version shown in service information
+```
+
+To check available versions:
+- Visit: https://github.com/franchise-factory/cmv-local-printing-agent-releases/releases
+
+---
+
+## Package Contents
+
+Each release package contains:
+
+| File | Purpose |
+|------|---------|
+| `cmv-local-printing-agent.exe` | Main service executable |
+| `libusb-1.0.dll` | USB communication library |
+| `windows-service-install.ps1` | Interactive service installer/manager |
+
+---
+
+## System Requirements
+
+- **Operating System:** Windows 10/11 or Windows Server 2016+
+- **PowerShell:** Version 5.1 or later
+- **Privileges:** Administrator access required
+- **Disk Space:** ~50 MB for installation
+- **Network:** Internet connectivity for downloads (automated installation only)
+
+---
+
+## Security Notes
+
+### Script Signing
+
+The PowerShell scripts are **not digitally signed**. You must unblock them before execution:
+
+```powershell
+Unblock-File -Path .\download-and-install.ps1
+Unblock-File -Path .\windows-service-install.ps1
+```
+
+### Execution Policy
+
+Recommended PowerShell execution policy:
+```powershell
+Set-ExecutionPolicy RemoteSigned -Scope CurrentUser
+```
+
+This allows locally created scripts and signed remote scripts to run.
+
+### Administrator Privileges
+
+Installation requires administrator privileges because:
+- Windows service registration requires admin rights
+- Installation to system directories requires elevation
+- WinUSB driver operations require administrative access
+
+---
+
+## License & Distribution
+
+- **Private Source Code:** Development occurs in private repository
+- **Public Releases:** Compiled binaries available at https://github.com/franchise-factory/cmv-local-printing-agent-releases
+- **Distribution:** Authorized for internal use only
+
+---
+
+**Last Updated:** 2025-10-22
+**Installation Guide Version:** 2.0
